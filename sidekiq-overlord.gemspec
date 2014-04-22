@@ -1,16 +1,16 @@
 # coding: utf-8
 lib = File.expand_path('../lib', __FILE__)
 $LOAD_PATH.unshift(lib) unless $LOAD_PATH.include?(lib)
-require 'overlord/version'
+require 'sidekiq-overlord/version'
 
 Gem::Specification.new do |spec|
-  spec.name          = "overlord"
-  spec.version       = Overlord::VERSION
+  spec.name          = "sidekiq-overlord"
+  spec.version       = Sidekiq::Overlord::VERSION
   spec.authors       = ["Stas Karpov"]
   spec.email         = ["gilbert_90@mail.ru"]
-  spec.summary       = %q{Overlord makes work on list of items easier with Sidekiq}
+  spec.summary       = %q{Overlord makes work with list of items easier over Sidekiq}
   spec.description   = %q{Write a longer description. Optional.}
-  spec.homepage      = ""
+  spec.homepage      = "https://github.com/dragothefiery/sidekiq-overlord"
   spec.license       = "MIT"
 
   spec.files         = `git ls-files -z`.split("\x0")

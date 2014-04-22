@@ -83,7 +83,7 @@ module Sidekiq
 
 				end
 				check_for_pause do
-					raise Overlord::PauseException
+					raise Sidekiq::Overlord::PauseException
 				end
 				Sidekiq.redis do |conn|
 					last_id = conn.rpop("processes:#{overlord_jid}:list")
@@ -133,7 +133,7 @@ module Sidekiq
 			end
 
 			def my_minion_is(cls)
-				raise "#{self.name}'s minion has no Overlord::Worker module included" unless cls.ancestors.include? Overlord::Worker
+				raise "#{self.name}'s minion has no Overlord::Worker module included" unless cls.ancestors.include? Sidekiq::Overlord::Worker
 				raise "#{self.name}'s minion has no Sidekiq::Worker module included" unless cls.ancestors.include? Sidekiq::Worker
 				self.minion = cls
 			end

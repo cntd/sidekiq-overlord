@@ -4,7 +4,7 @@ module Sidekiq
 			def call(worker_class, msg, queue)
 				begin
 					yield
-				rescue ::Overlord::PauseException
+				rescue Sidekiq::Overlord::PauseException
 					worker_class.set_meta(:paused_time, Time.now.to_i)
 					worker_class.set_meta(:status, 'paused')
 					#puts 'Paused'

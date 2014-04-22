@@ -9,7 +9,7 @@ module Sidekiq
 	module Overlord
 		def self.get_all_workers_meta(job_namespace, count)
 			Sidekiq.redis do |conn|
-				conn.lrange("processes:#{job_namespace}:all", 0, count).map { |jid| Sidekiq.redis.hgetall("processes:#{jid}:meta") }.reverse
+				conn.lrange("processes:#{job_namespace}:all", 0, count).map { |jid| conn.hgetall("processes:#{jid}:meta") }.reverse
 			end
 		end
 

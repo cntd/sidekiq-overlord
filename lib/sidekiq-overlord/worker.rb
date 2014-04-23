@@ -6,10 +6,10 @@ module Sidekiq
 			base.extend(ClassMethods)
 		end
 
-		def spawn_as_overlord(job_namespace, job_name, db_config = Rails.env)
+		def spawn_as_overlord(job_namespace, db_config = Rails.env)
 			self.overlord_jid = jid
 			set_meta(:job_namespace, job_namespace)
-			set_meta(:job_name, job_name)
+			set_meta(:job_name, options['job_name'])
 			set_meta(:status, 'working')
 			set_meta(:jid, jid)
 			Sidekiq.redis do |conn|
@@ -122,18 +122,28 @@ module Sidekiq
 
 		module ClassMethods
 
-			attr_accessor :is_overlord, :minion
+			attr_accessor :is_overlord, :minion, :is_minion
 
 			def overlord!
 				self.is_overlord = true
+				self.is_minion = false
 			end
 
 			def overlord?
 				self.is_overlord
 			end
 
+			def minion!
+				self.is_minion = true
+				self.is_overlord = false
+			end
+
+			def minion?
+				self.is_minion
+			end
+
 			def my_minion_is(cls)
-				raise "#{self.name}'s minion has no Overlord::Worker module included" unless cls.ancestors.include? Sidekiq::Overlord::Worker
+				raise "#{self.name}'s minion has no Sidekiq::Overlord::Worker module included" unless cls.ancestors.include? Sidekiq::Overlord::Worker
 				raise "#{self.name}'s minion has no Sidekiq::Worker module included" unless cls.ancestors.include? Sidekiq::Worker
 				self.minion = cls
 			end

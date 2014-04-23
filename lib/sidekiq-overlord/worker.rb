@@ -6,7 +6,7 @@ module Sidekiq
 			base.extend(ClassMethods)
 		end
 
-		def spawn_as_overlord(job_namespace, db_config = Rails.env)
+		def spawn_as_overlord(job_namespace)
 			self.overlord_jid = jid
 			set_meta(:job_namespace, job_namespace)
 			set_meta(:job_name, options['job_name'])
@@ -19,15 +19,13 @@ module Sidekiq
 			set_meta(:started, Time.now.to_i)
 			set_meta(:done, 0)
 			set_meta(:overlord_working, true)
-
-			WriteDb.establish_connection db_config
 		end
 
 		def spawn_as_minion(overlord_jid)
 			self.overlord_jid = overlord_jid
 		end
 
-		def release_minions(params)
+		def release_minions(params = {})
 			threads = options['threads'].to_i == 0 ? 5 : options['threads'].to_i
 			threads.times { self.class.minion.perform_async(jid, params) }
 		end

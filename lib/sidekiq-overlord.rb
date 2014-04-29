@@ -71,7 +71,7 @@ module Sidekiq
 				rename_job(job_namespace, jid, new_jid)
 			else
 				threads.times do
-					cls.minion.perform_async(jid, { date: status['log_date'], rospravo: param['rospravo'], urgencies: param['urgencies'], write_logs: param['write_logs'] })
+					cls.minion.perform_async(jid, { job_namespace: job_namespace, date: status['log_date'], rospravo: param['rospravo'], urgencies: param['urgencies'], write_logs: param['write_logs'] })
 				end
 			end
 		end

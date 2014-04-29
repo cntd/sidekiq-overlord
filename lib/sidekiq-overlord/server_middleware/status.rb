@@ -40,7 +40,7 @@ module Sidekiq
 				end
 			ensure
 				if worker_class.class.ancestors.include? ::Sidekiq::Overlord::Worker
-					worker_class.finish unless worker_class.has_stop_token?
+					worker_class.finish unless worker_class.has_stop_token? || worker_class.minions_released?
 					worker_class.set_meta(:overlord_working, false) if worker_class.class.overlord? && !worker_class.has_stop_token?
 					worker_class.after_work if worker_class.respond_to? :after_work
 				end

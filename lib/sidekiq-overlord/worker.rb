@@ -1,6 +1,6 @@
 module Sidekiq
 	module Overlord::Worker
-		attr_accessor :overlord_jid, :options, :minions_released?
+		attr_accessor :overlord_jid, :options, :minions_released
 
 		def self.included(base)
 			base.extend(ClassMethods)
@@ -19,18 +19,22 @@ module Sidekiq
 			set_meta(:started, Time.now.to_i)
 			set_meta(:done, 0)
 			set_meta(:overlord_working, true)
-			self.minions_released? = false
+			self.minions_released = false
 		end
 
 		def spawn_as_minion(overlord_jid)
 			self.overlord_jid = overlord_jid
-			self.minions_released? = false
+			self.minions_released = false
 		end
 
 		def release_minions(params = {})
 			threads = options['threads'].to_i == 0 ? 5 : options['threads'].to_i
 			threads.times { self.class.minion.perform_async(jid, params) }
-			self.minions_released? = true
+			self.minions_released = true
+		end
+
+		def minions_released?
+			self.minions_released
 		end
 
 		def finish

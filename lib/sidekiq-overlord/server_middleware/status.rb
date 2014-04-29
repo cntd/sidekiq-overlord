@@ -3,7 +3,7 @@ module Sidekiq
 		class Status
 			def call(worker_class, msg, queue)
 
-				if worker_class.class.overlord?
+				if worker_class.class.try(:overlord?)
 					raise 'Missing options argument' if msg['args'].empty?
 
 					options = msg['args'].first
@@ -17,7 +17,7 @@ module Sidekiq
 					worker_class.spawn_as_overlord(job_namespace)
 					worker_class.set_meta(:params, options.to_json)
 					worker_class.after_spawning if worker_class.respond_to? :after_spawning
-				elsif worker_class.class.minion?
+				elsif worker_class.class.try(:minion?)
 					raise 'Options parameter not found' if msg['args'][1].nil?
 					raise 'Options parameter should be hash' unless msg['args'][1].kind_of? Hash
 					worker_class.options = msg['args'][1]

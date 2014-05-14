@@ -18,19 +18,16 @@ module Sidekiq
 
 			set_meta(:started, Time.now.to_i)
 			set_meta(:done, 0)
-			set_meta(:overlord_working, true)
-			self.minions_released = false
+			set_meta(:error, 0)
 		end
 
 		def spawn_as_minion(overlord_jid)
 			self.overlord_jid = overlord_jid
-			self.minions_released = false
 		end
 
-		def release_minions(params = {})
-			threads = options['threads'].to_i == 0 ? 5 : options['threads'].to_i
-			threads.times { self.class.minion.perform_async(jid, params) }
-			self.minions_released = true
+		def release_minions(data, params = {})
+			params['job_namespace'] = options['job_namespace']
+			data.each { |item| self.class.minion.perform_async(params, jid, item) }
 		end
 
 		def minions_released?
@@ -41,7 +38,53 @@ module Sidekiq
 			set_meta(:status, 'finished')
 			set_meta(:completed, true)
 			set_meta(:completed_time, Time.now.to_i)
+		end
 
+		def get_completed
+			Sidekiq.redis do |conn|
+				conn.lrange("processes:#{overlord_jid}:completed", 0, get_meta(:total))
+			end
+		end
+
+		def save_log(message)
+			Sidekiq.redis do |conn|
+				conn.rpush("processes:#{overlord_jid}:log", message)
+			end
+		end
+
+		def get_log
+			Sidekiq.redis do |conn|
+				conn.lrange("processes:#{overlord_jid}:log", 0, get_meta(:total))
+			end
+		end
+
+		def save_error_log(message)
+			Sidekiq.redis do |conn|
+				conn.rpush("processes:#{overlord_jid}:error_log", message)
+			end
+		end
+
+		def get_error_log
+			Sidekiq.redis do |conn|
+				conn.lrange("processes:#{overlord_jid}:error_log", 0, get_meta(:error))
+			end
+		end
+
+		def minion_job_finished(item)
+			Sidekiq.redis do |conn|
+				conn.pipelined do
+					conn.rpush("processes:#{overlord_jid}:completed", item)
+				end
+			end
+			meta_incr(:done)
+			#puts "#{get_meta(:done)} - #{get_meta(:done).class.name}, #{get_meta(:total)} - #{get_meta(:total).class.name}"
+			if get_meta(:done).to_i + get_meta(:error).to_i == get_meta(:total).to_i
+				Sidekiq.redis do |conn|
+					puts "publish to #{overlord_jid}:meta"
+					conn.publish "#{overlord_jid}:meta", "completed"
+					set_meta(:completed_flag, 1)
+				end
+			end
 		end
 
 		def set_meta(key, value)
@@ -53,6 +96,12 @@ module Sidekiq
 		def get_meta(key)
 			Sidekiq.redis do |conn|
 				conn.hget("processes:#{overlord_jid}:meta", key)
+			end
+		end
+
+		def delete_meta(key)
+			Sidekiq.redis do |conn|
+				conn.hdel("processes:#{overlord_jid}:meta", key)
 			end
 		end
 
@@ -85,7 +134,6 @@ module Sidekiq
 						conn.rpush("processes:#{overlord_jid}:completed", last_id)
 						meta_incr(:done)
 					end
-
 				end
 				check_for_pause do
 					raise Sidekiq::Overlord::PauseException
@@ -127,7 +175,7 @@ module Sidekiq
 
 		module ClassMethods
 
-			attr_accessor :is_overlord, :minion, :is_minion
+			attr_accessor :is_overlord, :minion, :is_minion, :bookkeeper
 
 			def overlord!
 				self.is_overlord = true
@@ -145,6 +193,14 @@ module Sidekiq
 
 			def minion?
 				self.is_minion
+			end
+
+			def bookkeeper!
+				self.bookkeeper = true
+			end
+
+			def bookkeeper?
+				self.bookkeeper
 			end
 
 			def my_minion_is(cls)

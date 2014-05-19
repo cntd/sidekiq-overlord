@@ -101,7 +101,7 @@ module Sidekiq
 
 		def self.get_job_logs(jid)
 			Sidekiq.redis do |conn|
-				logs_count = conn.llen("processes:#{jid}.log")
+				logs_count = conn.llen("processes:#{jid}:log")
 				conn.lrange("processes:#{jid}:log", 0, logs_count)
 			end
 		end

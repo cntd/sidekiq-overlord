@@ -22,7 +22,7 @@ module Sidekiq
 				elsif worker_class.class.try(:minion?)
 					raise 'Options parameter not found' if msg['args'].first.nil?
 					raise 'Options parameter should be hash' unless msg['args'].first.kind_of? Hash
-					raise "No job_namespace passed to minion #{worker_class.class.name}" unless msg['args'].first.has_key? 'job_namespace'
+					#raise "No job_namespace passed to minion #{worker_class.class.name}" unless msg['args'].first.has_key? 'job_namespace'
 					worker_class.options = msg['args'].first
 					worker_class.spawn_as_minion(msg['args'][1])
 					worker_class.class.minion.sidekiq_options queue: worker_class.options['job_namespace'] if worker_class.class.minion

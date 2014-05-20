@@ -26,7 +26,7 @@ module Sidekiq
 		end
 
 		def release_minions(data, params = {})
-			params['job_namespace'] = options['job_namespace']
+			params['job_namespace'] = options['job_namespace'] || 'default'
 			data.each { |item| self.class.minion.perform_async(params, jid, item) }
 		end
 
@@ -78,7 +78,7 @@ module Sidekiq
 			end
 			meta_incr(:done)
 			#puts "#{get_meta(:done)} - #{get_meta(:done).class.name}, #{get_meta(:total)} - #{get_meta(:total).class.name}"
-			if get_meta(:done).to_i + get_meta(:error).to_i == get_meta(:total).to_i
+			if get_meta(:done).to_i == get_meta(:total).to_i
 				Sidekiq.redis do |conn|
 					puts "publish to #{overlord_jid}:meta"
 					conn.publish "#{overlord_jid}:meta", "completed"

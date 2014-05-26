@@ -9,53 +9,53 @@ module Sidekiq
 	module Overlord
 		def self.get_all_workers_meta(job_namespace, count)
 			Sidekiq.redis do |conn|
-				conn.lrange("processes:#{job_namespace}:all", 0, count).map { |jid| conn.hgetall("processes:#{jid}:meta") }.reverse
+				conn.lrange("jobs:#{job_namespace}:all", 0, count).map { |jid| conn.hgetall("jobs:#{jid}:meta") }.reverse
 			end
 		end
 
 		def self.set_job_meta(jid, key, value)
 			Sidekiq.redis do |conn|
-				conn.hset("processes:#{jid}:meta", key, value)
+				conn.hset("jobs:#{jid}:meta", key, value)
 			end
 		end
 
 		def self.get_job_meta(jid, key)
 			Sidekiq.redis do |conn|
-				conn.hget("processes:#{jid}:meta", key)
+				conn.hget("jobs:#{jid}:meta", key)
 			end
 		end
 
 		def self.pause_job(jid)
 			Sidekiq.redis do |conn|
-				conn.hset("processes:#{jid}:meta", :paused, true)
-				conn.hset("processes:#{jid}:meta", :paused_time, Time.now.to_i)
-				conn.hset("processes:#{jid}:meta", :status, 'paused')
+				conn.hset("jobs:#{jid}:meta", :paused, true)
+				conn.hset("jobs:#{jid}:meta", :paused_time, Time.now.to_i)
+				conn.hset("jobs:#{jid}:meta", :status, 'paused')
 				#conn.publish("#{jid}:meta", "paused")
 			end
 		end
 
 		def self.get_all_worker_meta(jid)
 			Sidekiq.redis do |conn|
-				conn.hgetall("processes:#{jid}:meta")
+				conn.hgetall("jobs:#{jid}:meta")
 			end
 		end
 
 		def self.remove_job(job_namespace, jid)
 			Sidekiq.redis do |conn|
-				conn.lrem("processes:#{job_namespace}:all", 1, jid)
-				conn.del("processes:#{jid}:meta")
-				conn.del("processes:#{jid}:completed")
-				conn.del("processes:#{jid}:list")
+				conn.lrem("jobs:#{job_namespace}:all", 1, jid)
+				conn.del("jobs:#{jid}:meta")
+				conn.del("jobs:#{jid}:completed")
+				conn.del("jobs:#{jid}:list")
 				conn.del("uploader:#{jid}")
 			end
 		end
 
 		def self.rename_job(job_namespace, old_jid, new_jid)
 			Sidekiq.redis do |conn|
-				conn.hset("processes:#{old_jid}:meta", :jid, new_jid)
-				conn.rename("processes:#{old_jid}:meta", "processes:#{new_jid}:meta")
-				conn.rename("processes:#{old_jid}:completed", "processes:#{new_jid}:completed")
-				conn.rename("processes:#{old_jid}:list", "processes:#{new_jid}:list")
+				conn.hset("jobs:#{old_jid}:meta", :jid, new_jid)
+				conn.rename("jobs:#{old_jid}:meta", "jobs:#{new_jid}:meta")
+				conn.rename("jobs:#{old_jid}:completed", "jobs:#{new_jid}:completed")
+				conn.rename("jobs:#{old_jid}:list", "jobs:#{new_jid}:list")
 			end
 			remove_job(job_namespace, old_jid)
 		end
@@ -94,15 +94,15 @@ module Sidekiq
 
 		def self.get_job_error_logs(jid)
 			Sidekiq.redis do |conn|
-				error_logs_count = conn.llen("processes:#{jid}:error_log")
-				conn.lrange("processes:#{jid}:error_log", 0, error_logs_count)
+				error_logs_count = conn.llen("jobs:#{jid}:error_log")
+				conn.lrange("jobs:#{jid}:error_log", 0, error_logs_count)
 			end
 		end
 
 		def self.get_job_logs(jid)
 			Sidekiq.redis do |conn|
 				#logs_count = conn.llen("processes:#{jid}:log")
-				conn.lrange("processes:#{jid}:log", 0, get_job_meta(jid, :total))
+				conn.lrange("jobs:#{jid}:log", 0, get_job_meta(jid, :total))
 			end
 		end
 	end

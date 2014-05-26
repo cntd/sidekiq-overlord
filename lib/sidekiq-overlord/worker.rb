@@ -13,7 +13,8 @@ module Sidekiq
 			set_meta(:status, 'working')
 			set_meta(:jid, jid)
 			Sidekiq.redis do |conn|
-				conn.rpush("processes:#{job_namespace}:all", jid)
+				conn.rpush("jobs:#{job_namespace}:all", jid)
+				#conn.expire
 			end
 
 			set_meta(:started, Time.now.to_i)
@@ -42,38 +43,38 @@ module Sidekiq
 
 		def get_completed
 			Sidekiq.redis do |conn|
-				conn.lrange("processes:#{overlord_jid}:completed", 0, get_meta(:total))
+				conn.lrange("jobs:#{overlord_jid}:completed", 0, get_meta(:total))
 			end
 		end
 
 		def save_log(message)
 			Sidekiq.redis do |conn|
-				conn.rpush("processes:#{overlord_jid}:log", message)
+				conn.rpush("jobs:#{overlord_jid}:log", message)
 			end
 		end
 
 		def get_log
 			Sidekiq.redis do |conn|
-				conn.lrange("processes:#{overlord_jid}:log", 0, get_meta(:total))
+				conn.lrange("jobs:#{overlord_jid}:log", 0, get_meta(:total))
 			end
 		end
 
 		def save_error_log(message)
 			Sidekiq.redis do |conn|
-				conn.rpush("processes:#{overlord_jid}:error_log", message)
+				conn.rpush("jobs:#{overlord_jid}:error_log", message)
 			end
 		end
 
 		def get_error_log
 			Sidekiq.redis do |conn|
-				conn.lrange("processes:#{overlord_jid}:error_log", 0, get_meta(:error))
+				conn.lrange("jobs:#{overlord_jid}:error_log", 0, get_meta(:error))
 			end
 		end
 
 		def minion_job_finished(item)
 			Sidekiq.redis do |conn|
 				conn.pipelined do
-					conn.rpush("processes:#{overlord_jid}:completed", item)
+					conn.rpush("jobs:#{overlord_jid}:completed", item)
 				end
 			end
 			meta_incr(:done)
@@ -89,38 +90,38 @@ module Sidekiq
 
 		def set_meta(key, value)
 			Sidekiq.redis do |conn|
-				conn.hset("processes:#{overlord_jid}:meta", key, value)
+				conn.hset("jobs:#{overlord_jid}:meta", key, value)
 			end
 		end
 
 		def get_meta(key)
 			Sidekiq.redis do |conn|
-				conn.hget("processes:#{overlord_jid}:meta", key)
+				conn.hget("jobs:#{overlord_jid}:meta", key)
 			end
 		end
 
 		def delete_meta(key)
 			Sidekiq.redis do |conn|
-				conn.hdel("processes:#{overlord_jid}:meta", key)
+				conn.hdel("jobs:#{overlord_jid}:meta", key)
 			end
 		end
 
 		def meta_incr(key)
 			Sidekiq.redis do |conn|
-				conn.hincrby("processes:#{overlord_jid}:meta", key, 1)
+				conn.hincrby("jobs:#{overlord_jid}:meta", key, 1)
 			end
 		end
 
 		def get_next_value
 			last_id = nil
 			Sidekiq.redis do |conn|
-				last_id = conn.rpop("processes:#{overlord_jid}:list")
+				last_id = conn.rpop("jobs:#{overlord_jid}:list")
 			end
 			while true
 
 				while last_id.nil? && overlord_working?
 					Sidekiq.redis do |conn|
-						last_id = conn.rpop("processes:#{overlord_jid}:list")
+						last_id = conn.rpop("jobs:#{overlord_jid}:list")
 					end
 					# Задержка, чтобы сильно не напрягать редис, пока оверлорд работает
 					sleep 0.1
@@ -131,7 +132,7 @@ module Sidekiq
 				yield(last_id)
 				Sidekiq.redis do |conn|
 					conn.pipelined do
-						conn.rpush("processes:#{overlord_jid}:completed", last_id)
+						conn.rpush("jobs:#{overlord_jid}:completed", last_id)
 						meta_incr(:done)
 					end
 				end
@@ -139,7 +140,7 @@ module Sidekiq
 					raise Sidekiq::Overlord::PauseException
 				end
 				Sidekiq.redis do |conn|
-					last_id = conn.rpop("processes:#{overlord_jid}:list")
+					last_id = conn.rpop("jobs:#{overlord_jid}:list")
 				end
 			end
 		end
@@ -148,7 +149,7 @@ module Sidekiq
 			raise 'Minions have no power to create work lists' unless self.class.overlord?
 			Sidekiq.redis do |conn|
 				items.each do |item|
-					conn.rpush "processes:#{overlord_jid}:list", item
+					conn.rpush "jobs:#{overlord_jid}:list", item
 				end
 			end
 		end
@@ -167,7 +168,7 @@ module Sidekiq
 
 		def get_list_length
 			Sidekiq.redis do |conn|
-				conn.llen("processes:#{overlord_jid}:list")
+				conn.llen("jobs:#{overlord_jid}:list")
 			end
 		end
 

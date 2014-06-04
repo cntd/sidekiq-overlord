@@ -1,14 +1,17 @@
 module Sidekiq
 	module Overlord::ServerMiddleware
 		class Status
-			attr_accessor :expire
+			attr_accessor :expire, :overlord_timeout, :minion_timeout
 
 			def initialize(options)
 				self.expire = options[:expire] || 12*30*24*3600
+				self.minion_timeout = options[:minion_timeout] || 0
+				self.overlord_timeout = options[:overlord_timeout] || 0
 			end
 
 			def call(worker_class, msg, queue)
 
+				timeout = 0
 				if worker_class.class.try(:overlord?)
 					raise 'Missing options argument' if msg['args'].empty?
 
@@ -26,6 +29,7 @@ module Sidekiq
 					#worker_class.class.sidekiq_options queue: job_namespace
 					worker_class.class.minion.sidekiq_options queue: job_namespace if worker_class.class.minion
 					worker_class.after_spawning if worker_class.respond_to? :after_spawning
+					timeout = self.overlord_timeout
 				elsif worker_class.class.try(:minion?)
 					raise 'Options parameter not found' if msg['args'].first.nil?
 					raise 'Options parameter should be hash' unless msg['args'].first.kind_of? Hash
@@ -35,6 +39,7 @@ module Sidekiq
 					worker_class.expire_time = self.expire
 					worker_class.class.minion.sidekiq_options queue: worker_class.options['job_namespace'] if worker_class.class.minion
 					worker_class.after_spawning if worker_class.respond_to? :after_spawning
+					timeout = self.minion_timeout
 				end
 
 				#if worker_class.has_stop_token?
@@ -42,7 +47,9 @@ module Sidekiq
 				#end
 
 				begin
-					yield
+					Timeout::timeout(timeout) do
+						yield
+					end
 				#rescue ::Sidekiq::Overlord::PauseException
 				#	raise "#{self.name} has no Sidekiq::Overlord::Worker module included" unless worker_class.class.ancestors.include? ::Sidekiq::Overlord::Worker
 				#	#worker_class.set_meta(:paused_time, Time.now.to_i)

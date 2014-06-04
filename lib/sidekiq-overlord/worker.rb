@@ -1,6 +1,6 @@
 module Sidekiq
 	module Overlord::Worker
-		attr_accessor :overlord_jid, :options, :minions_released
+		attr_accessor :overlord_jid, :options, :minions_released, :expire_time
 
 		def self.included(base)
 			base.extend(ClassMethods)
@@ -11,10 +11,9 @@ module Sidekiq
 			set_meta(:job_namespace, job_namespace)
 			set_meta(:job_name, options['job_name'])
 			set_meta(:status, 'working')
-			set_meta(:jid, jid)
+			set_meta(:jid, overlord_jid)
 			Sidekiq.redis do |conn|
 				conn.rpush("jobs:#{job_namespace}:all", jid)
-				#conn.expire
 			end
 
 			set_meta(:started, Time.now.to_i)
@@ -28,7 +27,7 @@ module Sidekiq
 
 		def release_minions(data, params = {})
 			params['job_namespace'] = options['job_namespace'] || 'default'
-			data.each { |item| self.class.minion.perform_async(params, jid, item) }
+			data.each { |item| self.class.minion.perform_async(params, overlord_jid, item) unless get_meta(:stopped) == 'true' }
 		end
 
 		def minions_released?
@@ -39,6 +38,7 @@ module Sidekiq
 			set_meta(:status, 'finished')
 			set_meta(:completed, true)
 			set_meta(:completed_time, Time.now.to_i)
+			self.expire_job(overlord_jid)
 		end
 
 		def get_completed
@@ -73,18 +73,18 @@ module Sidekiq
 
 		def minion_job_finished(item)
 			Sidekiq.redis do |conn|
-				conn.pipelined do
-					conn.rpush("jobs:#{overlord_jid}:completed", item)
-				end
+				conn.rpush("jobs:#{overlord_jid}:completed", item)
 			end
 			meta_incr(:done)
 			#puts "#{get_meta(:done)} - #{get_meta(:done).class.name}, #{get_meta(:total)} - #{get_meta(:total).class.name}"
-			if get_meta(:done).to_i == get_meta(:total).to_i
+			if get_meta(:done).to_i == get_meta(:total).to_i && get_meta(:completed) != 'true'
 				Sidekiq.redis do |conn|
-					puts "publish to #{overlord_jid}:meta"
-					conn.publish "#{overlord_jid}:meta", "completed"
-					set_meta(:completed_flag, 1)
+					finish
+					#puts "publish to #{overlord_jid}:meta"
+					#conn.publish "#{overlord_jid}:meta", "completed"
+					#set_meta(:completed_flag, 1)
 				end
+				all_finished if self.respond_to? :all_finished
 			end
 		end
 
@@ -172,7 +172,12 @@ module Sidekiq
 			end
 		end
 
-
+		def expire_job(jid)
+			Sidekiq.redis do |conn|
+				conn.keys("jobs:#{jid}:*").each { |key| conn.expire key, self.expire_time }
+				#conn.keys("jobs:#{jid}:*").each { |key| puts key }
+			end
+		end
 
 		module ClassMethods
 

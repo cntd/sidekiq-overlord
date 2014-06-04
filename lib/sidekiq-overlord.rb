@@ -9,7 +9,11 @@ module Sidekiq
 	module Overlord
 		def self.get_all_workers_meta(job_namespace, count)
 			Sidekiq.redis do |conn|
-				conn.lrange("jobs:#{job_namespace}:all", 0, count).map { |jid| conn.hgetall("jobs:#{jid}:meta") }.reverse
+				conn.lrange("jobs:#{job_namespace}:all", 0, count).map do |jid|
+					meta = conn.hgetall("jobs:#{jid}:meta")
+					conn.lrem("jobs:#{job_namespace}:all", 1, jid) if meta.empty?
+					meta
+				end.compact.reverse
 			end
 		end
 
@@ -42,11 +46,19 @@ module Sidekiq
 
 		def self.remove_job(job_namespace, jid)
 			Sidekiq.redis do |conn|
-				conn.lrem("jobs:#{job_namespace}:all", 1, jid)
-				conn.del("jobs:#{jid}:meta")
-				conn.del("jobs:#{jid}:completed")
-				conn.del("jobs:#{jid}:list")
-				conn.del("uploader:#{jid}")
+				unless conn.hget("jobs:#{jid}:meta", :status) == 'working'
+					conn.lrem("jobs:#{job_namespace}:all", 1, jid)
+					conn.del("jobs:#{jid}:meta")
+					conn.del("jobs:#{jid}:completed")
+					conn.del("jobs:#{jid}:list")
+				end
+
+				#conn.del("uploader:#{jid}")
+				#conn.publish "#{jid}:meta", "killed"
+
+				conn.hset("jobs:#{jid}:meta", :stopped, true)
+				conn.hset("jobs:#{jid}:meta", :stopped_time, Time.now.to_i)
+				conn.hset("jobs:#{jid}:meta", :status, 'stopped')
 			end
 		end
 

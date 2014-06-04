@@ -1,6 +1,12 @@
 module Sidekiq
 	module Overlord::ServerMiddleware
 		class Status
+			attr_accessor :expire
+
+			def initialize(options)
+				self.expire = options[:expire] || 12*30*24*3600
+			end
+
 			def call(worker_class, msg, queue)
 
 				if worker_class.class.try(:overlord?)
@@ -15,9 +21,10 @@ module Sidekiq
 
 					worker_class.options = options
 					worker_class.spawn_as_overlord(job_namespace)
+					worker_class.expire_time = self.expire
 					worker_class.set_meta(:params, options.to_json)
 					#worker_class.class.sidekiq_options queue: job_namespace
-					worker_class.class.minion.sidekiq_options queue: job_namespace
+					worker_class.class.minion.sidekiq_options queue: job_namespace if worker_class.class.minion
 					worker_class.after_spawning if worker_class.respond_to? :after_spawning
 				elsif worker_class.class.try(:minion?)
 					raise 'Options parameter not found' if msg['args'].first.nil?
@@ -25,6 +32,7 @@ module Sidekiq
 					#raise "No job_namespace passed to minion #{worker_class.class.name}" unless msg['args'].first.has_key? 'job_namespace'
 					worker_class.options = msg['args'].first
 					worker_class.spawn_as_minion(msg['args'][1])
+					worker_class.expire_time = self.expire
 					worker_class.class.minion.sidekiq_options queue: worker_class.options['job_namespace'] if worker_class.class.minion
 					worker_class.after_spawning if worker_class.respond_to? :after_spawning
 				end
@@ -56,33 +64,34 @@ module Sidekiq
 				end
 			ensure
 				if worker_class.class.ancestors.include? ::Sidekiq::Overlord::Worker
-					if worker_class.class.try(:overlord?)
-						if worker_class.get_meta(:total).to_i > 0 && !worker_class.has_stop_token?
-							$redis.with do |conn|
-								if worker_class.get_meta(:completed_flag) == '1'
-									worker_class.delete_meta(:completed_flag)
-									worker_class.all_finished if worker_class.respond_to? :all_finished
-									worker_class.finish unless worker_class.has_stop_token?
-								else
-									puts 'Subscribing'
-									conn.subscribe "#{worker_class.overlord_jid}:meta" do |on|
-										on.subscribe do |channel|
-										end
-										on.message do |channel, message|
-											conn.unsubscribe if message == 'paused' || message == 'completed'
-										end
-										on.unsubscribe do |channel, subs|
-											worker_class.all_finished if worker_class.respond_to? :all_finished
-											worker_class.finish unless worker_class.has_stop_token?
-										end
-									end
-								end
-
-							end
-						elsif !worker_class.has_stop_token?
-							worker_class.finish
-						end
-					end
+					#if worker_class.class.try(:overlord?)
+					#	if worker_class.get_meta(:total).to_i > 0 && !worker_class.has_stop_token?
+					#		$redis.with do |conn|
+					#			if worker_class.get_meta(:completed_flag) == '1'
+					#				worker_class.delete_meta(:completed_flag)
+					#				worker_class.all_finished if worker_class.respond_to? :all_finished
+					#				worker_class.finish unless worker_class.has_stop_token?
+					#			else
+					#				puts 'Subscribing'
+					#				conn.subscribe "#{worker_class.overlord_jid}:meta" do |on|
+					#					on.subscribe do |channel|
+					#					end
+					#					on.message do |channel, message|
+					#						conn.unsubscribe if %w(paused completed killed).include?(message)
+					#					end
+					#					on.unsubscribe do |channel, subs|
+					#						puts 'unsubscribe'
+					#						worker_class.all_finished if worker_class.respond_to? :all_finished && worker_class.get_meta(:status) != 'killed'
+					#						worker_class.finish unless worker_class.has_stop_token?
+					#					end
+					#				end
+					#			end
+					#
+					#		end
+					#	elsif !worker_class.has_stop_token?
+					#		worker_class.finish
+					#	end
+					#end
 					worker_class.after_work if worker_class.respond_to? :after_work
 				end
 

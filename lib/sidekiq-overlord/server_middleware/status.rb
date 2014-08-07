@@ -47,7 +47,11 @@ module Sidekiq
 				#end
 
 				begin
-					Timeout::timeout(timeout) do
+					if timeout > 0
+						Timeout::timeout(timeout) do
+							yield
+						end
+					else
 						yield
 					end
 				#rescue ::Sidekiq::Overlord::PauseException

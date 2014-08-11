@@ -47,13 +47,13 @@ module Sidekiq
 				#end
 
 				begin
-					if timeout > 0
-						Timeout::timeout(timeout) do
+					#if timeout > 0
+					#	Timeout::timeout(timeout) do
 							yield
-						end
-					else
-						yield
-					end
+						#end
+					#else
+					#	yield
+					#end
 				#rescue ::Sidekiq::Overlord::PauseException
 				#	raise "#{self.name} has no Sidekiq::Overlord::Worker module included" unless worker_class.class.ancestors.include? ::Sidekiq::Overlord::Worker
 				#	#worker_class.set_meta(:paused_time, Time.now.to_i)

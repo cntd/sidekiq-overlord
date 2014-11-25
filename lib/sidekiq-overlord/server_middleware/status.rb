@@ -1,3 +1,5 @@
+
+# -*- encoding : utf-8 -*-
 module Sidekiq
 	module Overlord::ServerMiddleware
 		class Status

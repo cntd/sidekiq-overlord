@@ -1,3 +1,4 @@
+# -*- encoding : utf-8 -*-
 module Sidekiq
 	module Overlord::Worker
 		attr_accessor :overlord_jid, :options, :minions_released, :expire_time, :pid, :can_kill_process

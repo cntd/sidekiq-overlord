@@ -1,3 +1,5 @@
+# -*- encoding : utf-8 -*-
+
 require 'sidekiq-overlord/version'
 #require 'overlord/client_middleware/prepare_worker'
 require 'sidekiq-overlord/server_middleware/exception_handler'

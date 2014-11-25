@@ -7,13 +7,20 @@ require 'sidekiq-overlord/worker'
 
 module Sidekiq
 	module Overlord
-		def self.get_all_workers_meta(job_namespace, count)
+		def self.get_all_workers_meta(job_namespace, count = 100)
+			job_namespace = [job_namespace] if not job_namespace.is_a? Array and job_namespace.present?
 			Sidekiq.redis do |conn|
-				conn.lrange("jobs:#{job_namespace}:all", 0, count).map do |jid|
-					meta = conn.hgetall("jobs:#{jid}:meta")
-					conn.lrem("jobs:#{job_namespace}:all", 1, jid) if meta.empty?
-					meta
+				conn.lrange('jobs:namespaces', 0, 10000).inject([]) do |array, jn|
+					ar = conn.lrange("jobs:#{jn}:all", 0, count).map do |jid|
+						meta = conn.hgetall("jobs:#{jid}:meta")
+						conn.lrem("jobs:#{job_namespace}:all", 1, jid) if meta.empty?
+						meta
+					end.compact
+
+					array.concat ar unless job_namespace.present? and job_namespace.exclude? jn
+					array
 				end.compact.reverse
+
 			end
 		end
 
@@ -48,6 +55,7 @@ module Sidekiq
 			Sidekiq.redis do |conn|
 				unless conn.hget("jobs:#{jid}:meta", :status) == 'working'
 					conn.lrem("jobs:#{job_namespace}:all", 1, jid)
+					conn.lrem('jobs:namespaces', 1, job_namespace)
 					conn.del("jobs:#{jid}:meta")
 					conn.del("jobs:#{jid}:completed")
 					conn.del("jobs:#{jid}:list")
@@ -59,6 +67,8 @@ module Sidekiq
 				conn.hset("jobs:#{jid}:meta", :stopped, true)
 				conn.hset("jobs:#{jid}:meta", :stopped_time, Time.now.to_i)
 				conn.hset("jobs:#{jid}:meta", :status, 'stopped')
+				`kill -TERM #{conn.hget("jobs:#{jid}:meta", :pid)}`
+				conn.decr('jobs:working')
 			end
 		end
 
@@ -83,6 +93,7 @@ module Sidekiq
 			if get_job_meta(jid, :done) == get_job_meta(jid, :total)
 				set_job_meta(jid, :status, 'finished')
 				set_job_meta(jid, :completed, true)
+				set_job_meta(jid, :paused, false)
 				set_job_meta(jid, :completed_time, Time.now.to_i)
 			else
 				set_job_meta(jid, :paused, false)
@@ -115,6 +126,38 @@ module Sidekiq
 			Sidekiq.redis do |conn|
 				#logs_count = conn.llen("processes:#{jid}:log")
 				conn.lrange("jobs:#{jid}:log", 0, get_job_meta(jid, :total))
+			end
+		end
+
+		def self.enqueue(job_class, options, priority = 3)
+			hash = SecureRandom.hex
+			priority ||= 3
+			puts options.inspect
+
+			Sidekiq.redis do |conn|
+				conn.rpush("jobs:#{hash}:all", hash)
+				conn.rpush('jobs:namespaces', hash)
+				conn.hset("jobs:#{hash}:meta", :status, 'queued')
+				conn.hset("jobs:#{hash}:meta", :message, 'В очереди')
+				conn.hset("jobs:#{hash}:meta", :jid, hash)
+				conn.hset("jobs:#{hash}:meta", :job_namespace, hash)
+				conn.hset("jobs:#{hash}:meta", :params, options.to_json)
+				conn.hset("jobs:#{hash}:meta", :priority, priority)
+
+				job = {
+					jid: hash,
+					job_class: job_class,
+					options: options,
+					priority: priority
+				}
+				conn.rpush('jobs:queue', job.to_json)
+			end
+			hash
+		end
+
+		def self.get_queue
+			Sidekiq.redis do |conn|
+				conn.zrangebyscore 'jobs:queue', 0, 100000
 			end
 		end
 	end

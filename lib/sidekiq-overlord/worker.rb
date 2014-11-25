@@ -1,6 +1,6 @@
 module Sidekiq
 	module Overlord::Worker
-		attr_accessor :overlord_jid, :options, :minions_released, :expire_time
+		attr_accessor :overlord_jid, :options, :minions_released, :expire_time, :pid, :can_kill_process
 
 		def self.included(base)
 			base.extend(ClassMethods)
@@ -12,9 +12,11 @@ module Sidekiq
 			set_meta(:job_name, options['job_name'])
 			set_meta(:status, 'working')
 			set_meta(:jid, overlord_jid)
-			Sidekiq.redis do |conn|
-				conn.rpush("jobs:#{job_namespace}:all", jid)
-			end
+			set_meta(:pid, options['pid'])
+			# Sidekiq.redis do |conn|
+			# 	conn.rpush("jobs:#{job_namespace}:all", jid)
+			# 	conn.rpush("jobs:namespaces", job_namespace)
+			# end
 
 			set_meta(:started, Time.now.to_i)
 			set_meta(:done, 0)
@@ -26,8 +28,9 @@ module Sidekiq
 		end
 
 		def release_minions(data, params = {})
-			params['job_namespace'] = options['job_namespace'] || 'default'
+			#params['job_namespace'] = options['job_namespace'] || 'default'
 			data.each { |item| self.class.minion.perform_async(params, overlord_jid, item) unless get_meta(:stopped) == 'true' }
+			self.can_kill_process = true if data.empty?
 		end
 
 		def minions_released?
@@ -51,6 +54,7 @@ module Sidekiq
 			Sidekiq.redis do |conn|
 				conn.rpush("jobs:#{overlord_jid}:log", message)
 			end
+			meta_incr(:log_count)
 		end
 
 		def get_log
@@ -85,6 +89,7 @@ module Sidekiq
 					#set_meta(:completed_flag, 1)
 				end
 				all_finished if self.respond_to? :all_finished
+				self.can_kill_process = true if get_meta(:pid).present?
 			end
 		end
 

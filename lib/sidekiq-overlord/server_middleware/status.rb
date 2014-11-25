@@ -72,6 +72,9 @@ module Sidekiq
 						worker_class.minion_job_finished(msg['args'][2])
 						worker_class.set_meta(:message, worker_class.finishing_message) if worker_class.respond_to? :finishing_message
 					end
+					#if worker_class.class.try(:overlord?) and worker_class.options.has_key? 'jid'
+					#	`kill -9 #{worker_class.options['pid']}`
+					#end
 				end
 			ensure
 				if worker_class.class.ancestors.include? ::Sidekiq::Overlord::Worker
@@ -104,6 +107,12 @@ module Sidekiq
 					#	end
 					#end
 					worker_class.after_work if worker_class.respond_to? :after_work
+					if worker_class.can_kill_process.present?
+						`kill -TERM #{worker_class.get_meta(:pid)}`
+						Sidekiq.redis do |conn|
+							conn.decr('jobs:working')
+						end
+					end
 				end
 
 			end

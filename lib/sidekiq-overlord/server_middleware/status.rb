@@ -110,7 +110,7 @@ module Sidekiq
 					#end
 					worker_class.after_work if worker_class.respond_to? :after_work
 					if worker_class.can_kill_process.present?
-						`kill -9 #{worker_class.get_meta(:pid)}`
+						`kill -TERM #{worker_class.get_meta(:pid)}`
 						Sidekiq.redis do |conn|
 							conn.decr('jobs:working')
 						end

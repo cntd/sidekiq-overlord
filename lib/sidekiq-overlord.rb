@@ -143,6 +143,7 @@ module Sidekiq
 				conn.hset("jobs:#{hash}:meta", :message, 'В очереди')
 				conn.hset("jobs:#{hash}:meta", :jid, hash)
 				conn.hset("jobs:#{hash}:meta", :job_namespace, hash)
+				conn.hset("jobs:#{hash}:meta", :job_name, options['job_name'])
 				conn.hset("jobs:#{hash}:meta", :params, options.to_json)
 				conn.hset("jobs:#{hash}:meta", :priority, priority)
 

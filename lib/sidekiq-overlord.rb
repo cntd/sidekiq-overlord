@@ -69,8 +69,8 @@ module Sidekiq
 				conn.hset("jobs:#{jid}:meta", :stopped, true)
 				conn.hset("jobs:#{jid}:meta", :stopped_time, Time.now.to_i)
 				conn.hset("jobs:#{jid}:meta", :status, 'stopped')
-				`kill -TERM #{conn.hget("jobs:#{jid}:meta", :pid)}`
 				conn.decr('jobs:working')
+				`kill -9 #{conn.hget("jobs:#{jid}:meta", :pid)}`
 			end
 		end
 
@@ -146,6 +146,7 @@ module Sidekiq
 				conn.hset("jobs:#{hash}:meta", :job_name, options['job_name'])
 				conn.hset("jobs:#{hash}:meta", :params, options.to_json)
 				conn.hset("jobs:#{hash}:meta", :priority, priority)
+				conn.hset("jobs:#{hash}:meta", :queued_at, Time.now.to_i)
 
 				job = {
 					jid: hash,

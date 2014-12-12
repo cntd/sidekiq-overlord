@@ -1,4 +1,3 @@
-
 # -*- encoding : utf-8 -*-
 module Sidekiq
 	module Overlord::ServerMiddleware
@@ -51,17 +50,17 @@ module Sidekiq
 				ensure
 					if worker_class.class.try(:minion?) && worker_class.class.try(:bookkeeper?)
 						worker_class.minion_job_finished(msg['args'][2])
-						worker_class.set_meta(:message, worker_class.finishing_message) if worker_class.respond_to? :finishing_message
-					end
-					if worker_class.class.try(:overlord?)
-						if worker_class.get_meta(:total).to_i == 0
-							worker_class.set_meta(:message, 'Не было ничего залито')
-							Sidekiq.redis do |conn|
-								conn.decr('jobs:working')
-							end
-							worker_class.finish
-							`kill -9 #{get_meta(:pid)}`
+						if worker_class.respond_to? :finishing_message
+							worker_class.set_meta(:message, worker_class.finishing_message)
 						end
+					end
+					if worker_class.class.try(:overlord?) and worker_class.get_meta(:total).to_i == 0
+						worker_class.set_meta(:message, 'Не было ничего залито')
+						Sidekiq.redis do |conn|
+							conn.decr('jobs:working')
+						end
+						worker_class.finish
+						`kill -9 #{worker_class.get_meta(:pid)}`
 					end
 				end
 			ensure

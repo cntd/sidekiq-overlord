@@ -55,7 +55,7 @@ module Sidekiq
 						end
 					end
 					if worker_class.class.try(:overlord?) and worker_class.get_meta(:total).to_i == 0
-						worker_class.set_meta(:message, 'Не было ничего залито')
+						worker_class.set_meta(:message, I18n::t('not_uploaded'))
 						Sidekiq.redis do |conn|
 							conn.decr('jobs:working')
 						end

@@ -164,5 +164,13 @@ module Sidekiq
 				conn.zrangebyscore 'jobs:queue', 0, 100000
 			end
 		end
+
+		def self.init
+			locale_files = Dir[File.join(File.dirname(__FILE__), 'sidekiq-overlord', 'locales', '**/*')]
+			I18n.load_path.unshift(*locale_files)
+			I18n.reload!
+		end
 	end
 end
+
+Sidekiq::Overlord.init

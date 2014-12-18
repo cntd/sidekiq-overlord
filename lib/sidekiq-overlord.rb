@@ -12,7 +12,7 @@ module Sidekiq
 		def self.get_all_workers_meta(job_namespace, count = 100)
 			job_namespace = [job_namespace] if not job_namespace.is_a? Array and job_namespace.present?
 			Sidekiq.redis do |conn|
-				conn.lrange('jobs:namespaces', 0, count).inject([]) do |array, jn|
+				conn.lrange('jobs:namespaces', 0, 10000).inject([]) do |array, jn|
 					ar = conn.lrange("jobs:#{jn}:all", 0, count).map do |jid|
 						meta = conn.hgetall("jobs:#{jid}:meta")
 						conn.lrem("jobs:#{job_namespace}:all", 1, jid) if meta.empty?
@@ -21,7 +21,7 @@ module Sidekiq
 
 					array.concat ar unless job_namespace.present? and job_namespace.exclude? jn
 					array
-				end.compact.reverse
+				end.compact.reverse[0..count]
 
 			end
 		end

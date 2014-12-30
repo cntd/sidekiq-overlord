@@ -82,7 +82,7 @@ module Sidekiq
 			end
 			meta_incr(:done)
 			#puts "#{get_meta(:done)} - #{get_meta(:done).class.name}, #{get_meta(:total)} - #{get_meta(:total).class.name}"
-			if get_meta(:done).to_i == get_meta(:total).to_i && get_meta(:completed) != 'true'
+			if get_meta(:done).to_i == get_meta(:total).to_i && get_meta(:completed) != 'true' and get_meta(:overlord_finished) == 'true'
 				Sidekiq.redis do |conn|
 					finish
 					#puts "publish to #{overlord_jid}:meta"

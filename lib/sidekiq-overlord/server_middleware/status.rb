@@ -54,13 +54,17 @@ module Sidekiq
 							worker_class.set_meta(:message, worker_class.finishing_message)
 						end
 					end
-					if worker_class.class.try(:overlord?) and worker_class.get_meta(:total).to_i == 0
-						worker_class.set_meta(:message, I18n::t('not_uploaded'))
-						Sidekiq.redis do |conn|
-							conn.decr('jobs:working')
+					if worker_class.class.try(:overlord?)
+						if worker_class.get_meta(:total).to_i == 0
+							worker_class.set_meta(:message, I18n::t('not_uploaded'))
+							Sidekiq.redis do |conn|
+								conn.decr('jobs:working')
+							end
+							worker_class.finish
+							`kill -9 #{worker_class.get_meta(:pid)}`
 						end
-						worker_class.finish
-						`kill -9 #{worker_class.get_meta(:pid)}`
+
+						worker_class.set_meta(:overlord_finished, true)
 					end
 				end
 			ensure

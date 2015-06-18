@@ -9,19 +9,53 @@ require 'sidekiq-overlord/worker'
 
 module Sidekiq
 	module Overlord
-		def self.get_all_workers_meta(job_namespace, count = 100)
+		def self.get_all_workers_meta(job_namespace, count = 100, options = {})
 			job_namespace = [job_namespace] if not job_namespace.is_a? Array and job_namespace.present?
 			Sidekiq.redis do |conn|
 				conn.lrange('jobs:namespaces', 0, 10000).inject([]) do |array, jn|
-					ar = conn.lrange("jobs:#{jn}:all", 0, count).map do |jid|
+					ar = conn.lrange("jobs:#{jn}:all", 0, 1000).map do |jid|
 						meta = conn.hgetall("jobs:#{jid}:meta")
 						conn.lrem("jobs:#{job_namespace}:all", 1, jid) if meta.empty?
+
+						# if options[:filter].present?
+						# 	result = case options[:filter]
+						# 	when 'in_process'
+						# 		%w(working queued).include?(meta['status'])
+						# 	when 'finished'
+						# 		%w(finished).include?(meta['status'])
+						# 	when 'stopped'
+						# 		 %w(stopped).include?(meta['status'])
+						# 	end
+						# 	return nil unless result
+						# end
+
 						meta
 					end.compact
 
+					if options[:filter].present?
+						result = case options[:filter]
+						when 'in_process'
+							ar.find_all { |item| %w(working queued).include?(item['status']) }.present?
+						when 'finished'
+							ar.find_all { |item| %w(finished).include?(item['status']) }.present?
+						when 'stopped'
+							ar.find_all { |item| %w(stopped not_queued).include?(item['status']) }.present?
+						end
+						next array unless result
+					end
+
 					array.concat ar unless job_namespace.present? and job_namespace.exclude? jn
 					array
-				end.compact.reverse[0..count]
+				end.compact.reverse[0..count].map do |job|
+					params = JSON.parse(job['params'])
+					if params['ids_from_file'].present? && params['ids_from_file'].length > 10
+						ids = params['ids_from_file'].split("\n")
+						params['ids_from_file'] = "#{ids[0..10].join("\n")} и еще #{ids.length - 10}..."
+						job['params'] = params.to_json
+					end
+					job[:pid_exists] = (Process.kill 0, job['pid'].to_i rescue 0)
+					job
+				end
 
 			end
 		end
@@ -55,22 +89,27 @@ module Sidekiq
 
 		def self.remove_job(job_namespace, jid)
 			Sidekiq.redis do |conn|
-				unless conn.hget("jobs:#{jid}:meta", :status) == 'working'
+				if conn.hget("jobs:#{jid}:meta", :status) == 'queued'
+
+					jobs = conn.lrange 'jobs:queue', 0, 10000
+					job = jobs.find { |h| JSON.parse(h)['jid'] == jid }
+					conn.lrem 'jobs:queue', 1, job
+
+					conn.hset("jobs:#{jid}:meta", :status, 'not_queued')
+
+				elsif conn.hget("jobs:#{jid}:meta", :status) != 'working'
 					conn.lrem("jobs:#{job_namespace}:all", 1, jid)
 					conn.lrem('jobs:namespaces', 1, job_namespace)
 					conn.del("jobs:#{jid}:meta")
 					conn.del("jobs:#{jid}:completed")
 					conn.del("jobs:#{jid}:list")
+				else
+					conn.hset("jobs:#{jid}:meta", :stopped, true)
+					conn.hset("jobs:#{jid}:meta", :stopped_time, Time.now.to_i)
+					conn.hset("jobs:#{jid}:meta", :status, 'stopped')
+					conn.decr('jobs:working')
+					`kill -9 #{conn.hget("jobs:#{jid}:meta", :pid)}`
 				end
-
-				#conn.del("uploader:#{jid}")
-				#conn.publish "#{jid}:meta", "killed"
-
-				conn.hset("jobs:#{jid}:meta", :stopped, true)
-				conn.hset("jobs:#{jid}:meta", :stopped_time, Time.now.to_i)
-				conn.hset("jobs:#{jid}:meta", :status, 'stopped')
-				conn.decr('jobs:working')
-				`kill -9 #{conn.hget("jobs:#{jid}:meta", :pid)}`
 			end
 		end
 

@@ -47,11 +47,13 @@ module Sidekiq
 					array.concat ar unless job_namespace.present? and job_namespace.exclude? jn
 					array
 				end.compact.reverse[0..count].map do |job|
-					params = JSON.parse(job['params'])
-					if params['ids_from_file'].present? && params['ids_from_file'].length > 10
-						ids = params['ids_from_file'].split("\n")
-						params['ids_from_file'] = "#{ids[0..10].join("\n")} и еще #{ids.length - 10}..."
-						job['params'] = params.to_json
+					if job['params'].present?
+						params = JSON.parse(job['params'])
+						if params['ids_from_file'].present? && params['ids_from_file'].length > 10
+							ids = params['ids_from_file'].split("\n")
+							params['ids_from_file'] = "#{ids[0..10].join("\n")} и еще #{ids.length - 10}..."
+							job['params'] = params.to_json
+						end
 					end
 					job[:pid_exists] = (Process.kill 0, job['pid'].to_i rescue 0)
 					job

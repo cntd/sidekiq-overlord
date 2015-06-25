@@ -35,7 +35,7 @@ module Sidekiq
 					if options[:filter].present?
 						result = case options[:filter]
 						when 'in_process'
-							ar.find_all { |item| %w(working queued).include?(item['status']) }.present?
+							ar.find_all { |item| %w(working queued paused).include?(item['status']) }.present?
 						when 'finished'
 							ar.find_all { |item| %w(finished).include?(item['status']) }.present?
 						when 'stopped'

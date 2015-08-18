@@ -85,6 +85,10 @@ module Sidekiq
 			if get_meta(:done).to_i == get_meta(:total).to_i && get_meta(:completed) != 'true' and get_meta(:overlord_finished) == 'true'
 				Sidekiq.redis do |conn|
 					finish
+
+					conn.del "queue:#{overlord_jid}"
+					conn.del "limit_fetch:busy:#{overlord_jid}"
+					conn.del "limit_fetch:probed:#{overlord_jid}"
 					#puts "publish to #{overlord_jid}:meta"
 					#conn.publish "#{overlord_jid}:meta", "completed"
 					#set_meta(:completed_flag, 1)

@@ -112,6 +112,9 @@ module Sidekiq
 					conn.decr('jobs:working')
 					`kill -9 #{conn.hget("jobs:#{jid}:meta", :pid)}`
 				end
+				conn.del "queue:#{jid}"
+				conn.del "limit_fetch:busy:#{jid}"
+				conn.del "limit_fetch:probed:#{jid}"
 			end
 		end
 

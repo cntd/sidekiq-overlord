@@ -105,6 +105,8 @@ module Sidekiq
 					conn.del("jobs:#{jid}:meta")
 					conn.del("jobs:#{jid}:completed")
 					conn.del("jobs:#{jid}:list")
+					conn.del("jobs:#{jid}:error_log")
+					conn.del("jobs:#{jid}:log")
 				else
 					conn.hset("jobs:#{jid}:meta", :stopped, true)
 					conn.hset("jobs:#{jid}:meta", :stopped_time, Time.now.to_i)

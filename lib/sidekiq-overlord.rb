@@ -32,16 +32,21 @@ module Sidekiq
 						meta
 					end.compact
 
+					if options[:type].present?
+						ar = ar.find_all { |item| item['type'] == options[:type] }
+						next array unless ar
+					end
+
 					if options[:filter].present?
-						result = case options[:filter]
+						ar = case options[:filter]
 						when 'in_process'
-							ar.find_all { |item| %w(working queued paused).include?(item['status']) }.present?
+							ar.find_all { |item| %w(working queued paused).include?(item['status']) }
 						when 'finished'
-							ar.find_all { |item| %w(finished).include?(item['status']) }.present?
-						when 'stopped'
-							ar.find_all { |item| %w(stopped not_queued).include?(item['status']) }.present?
+							ar.find_all { |item| %w(finished stopped not_queued).include?(item['status']) }
+						when 'stopped' # DEPRECATED
+							ar.find_all { |item| %w(stopped not_queued).include?(item['status']) }
 						end
-						next array unless result
+						next array unless ar
 					end
 
 					array.concat ar unless job_namespace.present? and job_namespace.exclude? jn
@@ -55,7 +60,24 @@ module Sidekiq
 							job['params'] = params.to_json
 						end
 					end
-					job[:pid_exists] = (Process.kill 0, job['pid'].to_i rescue 0)
+					if job['docs_new'].present?
+						job['docs_new'] = job['docs_new'].to_i
+					end
+					if job['docs_updated'].present?
+						job['docs_updated'] = job['docs_updated'].to_i
+					end
+					if job['docs_passed'].present?
+						job['docs_passed'] = job['docs_passed'].to_i
+					end
+					job['done'] = job['done'].to_i
+					job['total'] = job['total'].to_i
+					job['error'] = job['error'].to_i
+					if job['pid'].present?
+						job[:pid_exists] = (Process.kill 0, job['pid'].to_i rescue 0)
+					else
+						job[:pid_exists] = 0
+					end
+
 					job
 				end
 
@@ -170,6 +192,13 @@ module Sidekiq
 			end
 		end
 
+		def self.get_job_error_items(jid)
+			Sidekiq.redis do |conn|
+				error_logs_count = conn.llen("jobs:#{jid}:error_items")
+				conn.lrange("jobs:#{jid}:error_items", 0, error_logs_count)
+			end
+		end
+
 		def self.get_job_logs(jid)
 			Sidekiq.redis do |conn|
 				#logs_count = conn.llen("processes:#{jid}:log")
@@ -177,9 +206,9 @@ module Sidekiq
 			end
 		end
 
-		def self.enqueue(job_class, options, priority = 3)
+		def self.enqueue(job_class, options, priority = 2)
 			hash = SecureRandom.hex
-			priority ||= 3
+			priority ||= 2
 			puts options.inspect
 
 			Sidekiq.redis do |conn|
@@ -188,6 +217,7 @@ module Sidekiq
 				conn.hset("jobs:#{hash}:meta", :status, 'queued')
 				conn.hset("jobs:#{hash}:meta", :message, 'В очереди')
 				conn.hset("jobs:#{hash}:meta", :jid, hash)
+				conn.hset("jobs:#{hash}:meta", :type, options['type'])
 				conn.hset("jobs:#{hash}:meta", :job_namespace, hash)
 				conn.hset("jobs:#{hash}:meta", :job_name, options['job_name'])
 				conn.hset("jobs:#{hash}:meta", :params, options.to_json)

@@ -33,7 +33,7 @@ module Sidekiq
 					raise 'Options parameter should be hash' unless msg['args'].first.kind_of? Hash
 					#raise "No job_namespace passed to minion #{worker_class.class.name}" unless msg['args'].first.has_key? 'job_namespace'
 					worker_class.options = msg['args'].first
-					worker_class.spawn_as_minion(msg['args'][1])
+					worker_class.spawn_as_minion(msg['args'][1], msg['args'][2])
 					worker_class.expire_time = self.expire
 					worker_class.class.minion.sidekiq_options queue: worker_class.options['job_namespace'] if worker_class.class.minion
 					worker_class.after_spawning if worker_class.respond_to? :after_spawning
@@ -44,6 +44,7 @@ module Sidekiq
 				rescue Exception => ex
 					if worker_class.class.ancestors.include? ::Sidekiq::Overlord::Worker
 						worker_class.meta_incr(:error)
+						worker_class.error_item!
 						worker_class.save_error_log(ex.message)
 					end
 					raise

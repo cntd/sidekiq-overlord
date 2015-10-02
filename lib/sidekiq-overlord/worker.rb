@@ -1,7 +1,7 @@
 # -*- encoding : utf-8 -*-
 module Sidekiq
 	module Overlord::Worker
-		attr_accessor :overlord_jid, :options, :minions_released, :expire_time, :pid, :can_kill_process
+		attr_accessor :overlord_jid, :options, :minions_released, :expire_time, :pid, :can_kill_process, :item
 
 		def self.included(base)
 			base.extend(ClassMethods)
@@ -24,8 +24,9 @@ module Sidekiq
 			set_meta(:error, 0)
 		end
 
-		def spawn_as_minion(overlord_jid)
+		def spawn_as_minion(overlord_jid, item)
 			self.overlord_jid = overlord_jid
+			self.item = item
 		end
 
 		def release_minions(data, params = {})
@@ -73,6 +74,12 @@ module Sidekiq
 		def get_error_log
 			Sidekiq.redis do |conn|
 				conn.lrange("jobs:#{overlord_jid}:error_log", 0, get_meta(:error))
+			end
+		end
+
+		def error_item!
+			Sidekiq.redis do |conn|
+				conn.rpush("jobs:#{overlord_jid}:error_items", item)
 			end
 		end
 

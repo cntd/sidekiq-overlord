@@ -1,7 +1,7 @@
 # -*- encoding : utf-8 -*-
 module Sidekiq
 	module Overlord::Worker
-		attr_accessor :overlord_jid, :options, :minions_released, :expire_time, :pid, :can_kill_process, :item
+		attr_accessor :overlord_jid, :options, :minions_released, :expire_time, :pid, :can_kill_process, :item, :redis_logs_enabled
 
 		def self.included(base)
 			base.extend(ClassMethods)
@@ -9,6 +9,7 @@ module Sidekiq
 
 		def spawn_as_overlord(job_namespace)
 			self.overlord_jid = jid
+			self.redis_logs_enabled = true
 			set_meta(:job_namespace, job_namespace)
 			set_meta(:job_name, options['job_name'])
 			set_meta(:status, 'working')
@@ -27,10 +28,12 @@ module Sidekiq
 		def spawn_as_minion(overlord_jid, item)
 			self.overlord_jid = overlord_jid
 			self.item = item
+			self.redis_logs_enabled = true
 		end
 
 		def release_minions(data, params = {})
 			#params['job_namespace'] = options['job_namespace'] || 'default'
+			params['redis_logs_enabled'] = self.redis_logs_enabled
 			data.each { |item| self.class.minion.perform_async(params, overlord_jid, item) unless get_meta(:stopped) == 'true' }
 			self.can_kill_process = true if data.empty?
 		end
@@ -53,40 +56,54 @@ module Sidekiq
 		end
 
 		def save_log(message)
-			Sidekiq.redis do |conn|
-				conn.rpush("jobs:#{overlord_jid}:log", message)
+			if self.redis_logs_enabled
+				Sidekiq.redis do |conn|
+					conn.rpush("jobs:#{overlord_jid}:log", message)
+				end
+				meta_incr(:log_count)
 			end
-			meta_incr(:log_count)
 		end
 
 		def get_log
-			Sidekiq.redis do |conn|
-				conn.lrange("jobs:#{overlord_jid}:log", 0, get_meta(:total))
+			if self.redis_logs_enabled
+				Sidekiq.redis do |conn|
+					conn.lrange("jobs:#{overlord_jid}:log", 0, get_meta(:total))
+				end
+			else
+				[]
 			end
 		end
 
 		def save_error_log(message)
-			Sidekiq.redis do |conn|
-				conn.rpush("jobs:#{overlord_jid}:error_log", message)
+			if self.redis_logs_enabled
+				Sidekiq.redis do |conn|
+					conn.rpush("jobs:#{overlord_jid}:error_log", message)
+				end
 			end
 		end
 
 		def get_error_log
-			Sidekiq.redis do |conn|
-				conn.lrange("jobs:#{overlord_jid}:error_log", 0, get_meta(:error))
+			if self.redis_logs_enabled
+				Sidekiq.redis do |conn|
+					conn.lrange("jobs:#{overlord_jid}:error_log", 0, get_meta(:error))
+				end
+			else
+				[]
 			end
 		end
 
 		def error_item!
-			Sidekiq.redis do |conn|
-				conn.rpush("jobs:#{overlord_jid}:error_items", item)
+			if self.redis_logs_enabled
+				Sidekiq.redis do |conn|
+					conn.rpush("jobs:#{overlord_jid}:error_items", item)
+				end
 			end
 		end
 
 		def minion_job_finished(item)
-			Sidekiq.redis do |conn|
-				conn.rpush("jobs:#{overlord_jid}:completed", item)
-			end
+			#Sidekiq.redis do |conn|
+				#conn.rpush("jobs:#{overlord_jid}:completed", item)
+			#end
 			meta_incr(:done)
 			#puts "#{get_meta(:done)} - #{get_meta(:done).class.name}, #{get_meta(:total)} - #{get_meta(:total).class.name}"
 			if get_meta(:done).to_i == get_meta(:total).to_i && get_meta(:completed) != 'true' and get_meta(:overlord_finished) == 'true'

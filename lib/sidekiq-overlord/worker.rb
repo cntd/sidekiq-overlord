@@ -93,11 +93,11 @@ module Sidekiq
 		end
 
 		def error_item!
-			if self.redis_logs_enabled
+			#if self.redis_logs_enabled
 				Sidekiq.redis do |conn|
 					conn.rpush("jobs:#{overlord_jid}:error_items", item)
 				end
-			end
+			#end
 		end
 
 		def minion_job_finished(item)

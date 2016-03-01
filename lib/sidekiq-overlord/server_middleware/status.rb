@@ -62,6 +62,7 @@ module Sidekiq
 								conn.decr('jobs:working')
 							end
 							worker_class.finish
+							worker_class.set_meta(:debug, 'killed 1')
 							`kill -9 #{worker_class.get_meta(:pid)}`
 						end
 
@@ -75,6 +76,7 @@ module Sidekiq
 						Sidekiq.redis do |conn|
 							conn.decr('jobs:working')
 						end
+						worker_class.set_meta(:debug, 'killed 2')
 						`kill -9 #{worker_class.get_meta(:pid)}`
 					end
 				end
